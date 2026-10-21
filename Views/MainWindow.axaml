@@ -265,6 +265,7 @@
                                 <!-- Checked on every launch; only appears when a newer build exists -->
                                 <Button Classes="UpdatePill" Click="OnUpdateBadgeClicked" Cursor="Hand"
                                         IsVisible="{Binding HasUpdateAvailable}" Margin="0,0,6,0"
+                                        IsEnabled="{Binding CanCheckUpdates}"
                                         ToolTip.Tip="{Binding UpdateStatusText}">
                                     <StackPanel Orientation="Horizontal" Spacing="7">
                                         <PathIcon Data="M 12,2 L 6,8 H 10 V 15 H 14 V 8 H 18 Z M 5,18 H 19 V 21 H 5 Z"

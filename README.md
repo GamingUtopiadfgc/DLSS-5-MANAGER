@@ -12,6 +12,8 @@
 
 [![Download Latest Release](https://img.shields.io/badge/DOWNLOAD-LATEST%20RELEASE%20(V1.3.5)-00e676?style=for-the-badge&logo=github&logoColor=white)](https://github.com/NODIX-TECH/DLSS-5-MANAGER/releases)
 
+Already installed? Use **Settings → Check for updates** to download and install the latest stable GitHub release.
+
 ## ❤️ Support Development
 
 If you enjoy the project and would like to support its continued development, your support helps fund additional GPUs, displays, and other hardware for compatibility testing.

@@ -450,6 +450,7 @@ type MainViewModel() as this =
 
     // ---- Update check state ---------------------------------------------
     let mutable isCheckingUpdates = false
+    let mutable isUpdating = false
     let mutable updateStatusText = ""
     let mutable hasUpdateAvailable = false
     let mutable latestVersionFound = ""
@@ -3439,7 +3440,6 @@ type MainViewModel() as this =
     // UPDATES
     // ---------------------------------------------------------------------
     member this.AppVersionText = "v" + UpdateChecker.CurrentVersion
-    member this.DownloadPageUrl = UpdateChecker.DownloadPageUrl
 
     /// Where the app points people who want to say thanks, and where the
     /// walkthroughs live. Both open in the system browser.
@@ -3488,7 +3488,14 @@ type MainViewModel() as this =
                 this.RaisePropertyChanged("UpdateButtonText")
                 this.RaisePropertyChanged("CanCheckUpdates")
 
-    member this.CanCheckUpdates = not isCheckingUpdates
+    member this.IsUpdating
+        with get () = isUpdating
+        and set value =
+            if this.SetProperty(&isUpdating, value) then
+                this.RaisePropertyChanged("UpdateButtonText")
+                this.RaisePropertyChanged("CanCheckUpdates")
+
+    member this.CanCheckUpdates = not isCheckingUpdates && not isUpdating
 
     member this.UpdateStatusText
         with get () = updateStatusText
@@ -3512,27 +3519,61 @@ type MainViewModel() as this =
         else "UPDATE v" + latestVersionFound
 
     member this.UpdateButtonText =
-        if isCheckingUpdates then "CHECKING..."
-        elif hasUpdateAvailable then "DOWNLOAD UPDATE"
+        if isUpdating then "UPDATING..."
+        elif isCheckingUpdates then "CHECKING..."
         else "CHECK FOR UPDATES"
 
     member this.UpdateStatusBrush: IBrush =
         if hasUpdateAvailable then SolidColorBrush(Color.Parse("#86EFAC")) :> IBrush
         else SolidColorBrush(Color.Parse("#94A3B8")) :> IBrush
 
-    member this.CheckForUpdates() =
-        if not isCheckingUpdates then
+    member this.StartUpdate(onLaunched: unit -> unit) =
+        if not isCheckingUpdates && not isUpdating then
             this.IsCheckingUpdates <- true
-            this.UpdateStatusText <- "Contacting update server..."
+            this.UpdateStatusText <- "Checking GitHub for the latest version..."
 
             async {
-                let! result = UpdateChecker.check ()
+                try
+                    let! result = UpdateChecker.check ()
 
-                Dispatcher.UIThread.Post(fun () ->
-                    this.IsCheckingUpdates <- false
-                    latestVersionFound <- result.LatestVersion
-                    this.HasUpdateAvailable <- result.HasUpdate
-                    this.UpdateStatusText <- result.Message)
+                    if not result.HasUpdate then
+                        Dispatcher.UIThread.Post(fun () ->
+                            this.IsCheckingUpdates <- false
+                            this.HasUpdateAvailable <- false
+                            this.UpdateStatusText <- result.Message)
+                    elif String.IsNullOrWhiteSpace(result.InstallerUrl)
+                         || String.IsNullOrWhiteSpace(result.InstallerSha256) then
+                        Dispatcher.UIThread.Post(fun () ->
+                            this.IsCheckingUpdates <- false
+                            latestVersionFound <- result.LatestVersion
+                            this.HasUpdateAvailable <- true
+                            this.UpdateStatusText <- sprintf "Version %s is available, but its installer or integrity digest is missing." result.LatestVersion)
+                    else
+                        Dispatcher.UIThread.Post(fun () ->
+                            this.IsCheckingUpdates <- false
+                            this.IsUpdating <- true
+                            latestVersionFound <- result.LatestVersion
+                            this.HasUpdateAvailable <- true
+                            this.UpdateStatusText <- sprintf "Downloading update v%s..." result.LatestVersion)
+
+                        do!
+                            UpdateChecker.downloadAndLaunchInstaller result.InstallerUrl result.InstallerSha256 (fun received total ->
+                                Dispatcher.UIThread.Post(fun () ->
+                                    if total > 0L then
+                                        let percent = int (received * 100L / total)
+                                        this.UpdateStatusText <- sprintf "Downloading update v%s (%d%%)..." result.LatestVersion percent
+                                    else
+                                        let megabytes = received / (1024L * 1024L)
+                                        this.UpdateStatusText <- sprintf "Downloading update v%s (%d MB)..." result.LatestVersion megabytes))
+
+                        Dispatcher.UIThread.Post(fun () ->
+                            this.UpdateStatusText <- "Starting installer. The app will reopen when the update finishes."
+                            onLaunched())
+                with ex ->
+                    Dispatcher.UIThread.Post(fun () ->
+                        this.IsCheckingUpdates <- false
+                        this.IsUpdating <- false
+                        this.UpdateStatusText <- "Update failed: " + ex.Message)
             }
             |> Async.Start
 

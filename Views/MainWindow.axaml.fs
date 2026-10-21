@@ -2132,25 +2132,17 @@ type MainWindow() as this =
         | :? MainViewModel as vm -> this.OpenExternal(vm.TutorialsUrl)
         | _ -> ()
 
-    /// The header pill only exists while an update is waiting, so it always
-    /// goes straight to the download page.
+    /// The header pill only exists while an update is waiting, so it starts
+    /// the automatic update flow directly.
     member this.OnUpdateBadgeClicked(sender: obj, e: RoutedEventArgs) =
         match this.DataContext with
-        | :? MainViewModel as vm -> this.OpenExternal(vm.DownloadPageUrl)
+        | :? MainViewModel as vm -> vm.StartUpdate(fun () -> this.Close())
         | _ -> ()
 
-    /// First press checks GitHub; once an update is known it opens the
-    /// official download page instead.
+    /// Checks GitHub and installs the latest stable release when one is found.
     member this.OnCheckUpdatesClicked(sender: obj, e: RoutedEventArgs) =
         match this.DataContext with
-        | :? MainViewModel as vm ->
-            if vm.HasUpdateAvailable then
-                try
-                    Process.Start(ProcessStartInfo(vm.DownloadPageUrl, UseShellExecute = true)) |> ignore
-                with _ ->
-                    ()
-            else
-                vm.CheckForUpdates()
+        | :? MainViewModel as vm -> vm.StartUpdate(fun () -> this.Close())
         | _ -> ()
 
     member this.OnSetTopBarLayout(sender: obj, e: RoutedEventArgs) =
